@@ -221,7 +221,7 @@ def run_pipeline(excel_path: str):
 
 def build_result_text(used_cards) -> str:
     lines = []
-    lines.append("현재까지 카드별로 사용된 금액입니다. 한도는 25만원입니다.\n")
+    lines.append("현재까지 카드별로 사용되고 남은 금액입니다. 한도는 25만원입니다.\n")
     for last4, amt in used_cards:
         remain = CARD_LIMIT - amt
         if remain < 0:
