@@ -338,20 +338,16 @@ def on_message_events(body, logger):
             final_used_cards = used_cards  # 마지막 파일 처리 결과로 갱신
 
         # 마지막 결과만 출력
-        final_text = "엑셀 처리 완료 ✅\n"
-        if out_txt_latest:
-            final_text += f"TXT: {out_txt_latest}\n\n"
+        final_text = f"✅ 엑셀 처리 완료 ({added_total})\n"
         if final_used_cards is not None:
-            final_text += build_result_text(final_used_cards)
+            final_text += "\n" + build_result_text(final_used_cards)
         else:
-            final_text += "처리할 엑셀 데이터가 없습니다."
+            final_text += "\n처리할 엑셀 데이터가 없습니다."
 
-        # (선택) 총 추가 건수 표시하고 싶으면 아래 한 줄만 주석 해제
-        # final_text = final_text.replace("엑셀 처리 완료 ✅", f"엑셀 처리 완료 ✅ (추가 {added_total}건)")
-
+        # ✅ 변경 1: 스레드로 보내지 않고 바깥 메시지로 전송 (thread_ts 제거)
+        # ✅ 변경 2: TXT: ... 라인 출력 제거 (out_txt_latest 사용 안 함)
         app.client.chat_postMessage(
             channel=channel,
-            thread_ts=ts,
             text=final_text,
         )
 
@@ -360,7 +356,6 @@ def on_message_events(body, logger):
         try:
             app.client.chat_postMessage(
                 channel=channel,
-                thread_ts=ts,
                 text=f"처리 실패 ❌\n{type(e).__name__}: {e}",
             )
         except Exception as ee:
