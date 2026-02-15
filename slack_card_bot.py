@@ -176,6 +176,9 @@ def totals_from_txt(txt_path: str):
 
 
 def run_pipeline(excel_path: str):
+    """
+    엑셀 읽기 -> 이번달 txt 업데이트 -> (업데이트된 txt 기준) 카드별 합계 리턴
+    """
     outdir = script_dir()
     kst_now = now_kst()
     yyyymm = month_key(kst_now)
@@ -218,7 +221,7 @@ def run_pipeline(excel_path: str):
 
 def build_result_text(used_cards) -> str:
     lines = []
-    lines.append("\n현재까지 카드별로 사용된 금액입니다. 한도는 25만원입니다.\n")
+    lines.append("현재까지 카드별로 사용된 금액입니다. 한도는 25만원입니다.\n")
     for last4, amt in used_cards:
         remain = CARD_LIMIT - amt
         if remain < 0:
@@ -295,10 +298,6 @@ def on_message_events(body, logger):
     ts = event.get("ts")  # thread_ts
     files = event.get("files", [])
 
-    # ✅ 디버그: 이벤트 들어오는지 확인 (콘솔에서 확인)
-    if files:
-        print(f"[DEBUG] message event received: channel={channel}, ts={ts}, subtype={event.get('subtype')} files={len(files)}")
-
     if not channel or not ts or not files:
         return
 
@@ -317,8 +316,10 @@ def on_message_events(body, logger):
         return
 
     try:
-        results_texts = []
+        # ✅ 변경: 중간 메시지 없이 "최종(마지막 처리 후) 결과"만 전송
         out_txt_latest = None
+        added_total = 0
+        final_used_cards = None
 
         for idx, file_id in enumerate(excel_file_ids, start=1):
             finfo = app.client.files_info(file=file_id).get("file", {})
@@ -333,14 +334,20 @@ def on_message_events(body, logger):
 
             out_txt, added, used_cards, _total_sum = run_pipeline(save_path)
             out_txt_latest = out_txt
+            added_total += added
+            final_used_cards = used_cards  # 마지막 파일 처리 결과로 갱신
 
-            result = build_result_text(used_cards)
-            results_texts.append(f"*[{idx}/{len(excel_file_ids)}] {fname}* (추가 {added}건)\n{result}")
-
+        # 마지막 결과만 출력
         final_text = "엑셀 처리 완료 ✅\n"
         if out_txt_latest:
             final_text += f"TXT: {out_txt_latest}\n\n"
-        final_text += "\n\n".join(results_texts)
+        if final_used_cards is not None:
+            final_text += build_result_text(final_used_cards)
+        else:
+            final_text += "처리할 엑셀 데이터가 없습니다."
+
+        # (선택) 총 추가 건수 표시하고 싶으면 아래 한 줄만 주석 해제
+        # final_text = final_text.replace("엑셀 처리 완료 ✅", f"엑셀 처리 완료 ✅ (추가 {added_total}건)")
 
         app.client.chat_postMessage(
             channel=channel,
@@ -349,7 +356,6 @@ def on_message_events(body, logger):
         )
 
     except Exception as e:
-        # 콘솔에도 찍어주기(무반응 방지)
         print(f"[ERROR] {type(e).__name__}: {e}")
         try:
             app.client.chat_postMessage(
