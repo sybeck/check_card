@@ -23,7 +23,7 @@ load_dotenv()
 KST = timezone(timedelta(hours=9))
 
 CARDS_KEEP = {"0858", "2866", "2493", "3799", "0811", "0620", "7945", "3054", "4298", "9733"}
-CARD_LIMIT = 250_000  # 카드별 월 한도
+CARD_LIMIT = 270_000  # 카드별 월 한도
 
 COL_DT = "이용일시"
 COL_APPR = "승인번호"
@@ -221,7 +221,7 @@ def run_pipeline(excel_path: str):
 
 def build_result_text(used_cards) -> str:
     lines = []
-    lines.append("현재까지 카드별로 사용되고 남은 금액입니다. 한도는 25만원입니다.\n")
+    lines.append(f"현재까지 카드별로 사용되고 남은 금액입니다. 한도는 {CARD_LIMIT/10000}만원입니다.\n")
     for last4, amt in used_cards:
         remain = CARD_LIMIT - amt
         if remain < 0:
