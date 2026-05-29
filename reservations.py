@@ -18,6 +18,11 @@ DURATION_OPTIONS = [
     ("4시간", 240),
 ]
 
+# 시작 시간 옵션 (08:00 ~ 23:30, 30분 단위)
+START_TIME_OPTIONS = [
+    f"{h:02d}:{m:02d}" for h in range(8, 24) for m in (0, 30)
+]
+
 CALLBACK_ID = "reservation_submit"
 CANCEL_CALLBACK_ID = "reservation_cancel"
 
@@ -178,9 +183,16 @@ def build_reservation_modal():
                 "block_id": B_START,
                 "label": {"type": "plain_text", "text": "시작 시간"},
                 "element": {
-                    "type": "timepicker",
+                    "type": "static_select",
                     "action_id": "value",
-                    "placeholder": {"type": "plain_text", "text": "시간 선택"},
+                    "placeholder": {"type": "plain_text", "text": "시간 선택 (30분 단위)"},
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": t},
+                            "value": t,
+                        }
+                        for t in START_TIME_OPTIONS
+                    ],
                 },
             },
             {
@@ -207,8 +219,14 @@ def build_reservation_modal():
 # =========================
 # Formatting
 # =========================
+def format_date_display(date_str: str) -> str:
+    """'YYYY-MM-DD' -> 'MM월 DD일'."""
+    dt = datetime.strptime(date_str, "%Y-%m-%d")
+    return dt.strftime("%m월 %d일")
+
+
 def format_reservation_line(r) -> str:
-    return f"- {r['date']} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
+    return f"- {format_date_display(r['date'])} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
 
 
 def upcoming_reservations():
@@ -223,7 +241,7 @@ def build_cancel_modal(upcoming):
     """취소할 예약을 고르는 드롭다운 모달. upcoming: 남은 예약 list."""
     options = []
     for r in upcoming:
-        label = f"{r['date']} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
+        label = f"{format_date_display(r['date'])} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
         options.append({
             "text": {"type": "plain_text", "text": label[:75]},  # Slack 옵션 텍스트 75자 제한
             "value": r["id"],
@@ -269,7 +287,7 @@ def register_reservation_handlers(app):
         meeting_name = state[B_NAME]["value"]["value"].strip()
         reserver = state[B_RESERVER]["value"]["value"].strip()
         date_str = state[B_DATE]["value"]["selected_date"]
-        start_str = state[B_START]["value"]["selected_time"]
+        start_str = state[B_START]["value"]["selected_option"]["value"]
         duration_min = int(state[B_DURATION]["value"]["selected_option"]["value"])
 
         start_dt = datetime.strptime(f"{date_str} {start_str}", "%Y-%m-%d %H:%M").replace(tzinfo=KST)
@@ -291,7 +309,7 @@ def register_reservation_handlers(app):
                 response_action="errors",
                 errors={
                     B_START: f"기존 예약과 겹칩니다: {conflict['meeting_name']} "
-                             f"({conflict['date']} {conflict['start']}~{conflict['end']})"
+                             f"({format_date_display(conflict['date'])} {conflict['start']}~{conflict['end']})"
                 },
             )
             return
@@ -314,19 +332,14 @@ def register_reservation_handlers(app):
             logger.exception("Failed to save reservation")
             return
 
-        # 4) 완료 메시지: 요약 부모 메시지 + 스레드 답글
+        # 4) 완료 메시지
         try:
-            parent = client.chat_postMessage(
+            client.chat_postMessage(
                 channel=RESERVE_CHANNEL_ID,
                 text=(
                     f"📅 새 예약: {meeting_name} | "
-                    f"{date_str} {start_str}~{end_str} | 예약자 {reserver}"
+                    f"{format_date_display(date_str)} {start_str}~{end_str} | 예약자 {reserver}"
                 ),
-            )
-            client.chat_postMessage(
-                channel=RESERVE_CHANNEL_ID,
-                thread_ts=parent["ts"],
-                text="✅ 예약이 완료되었습니다.",
             )
         except Exception:
             logger.exception("Failed to post reservation confirmation")
@@ -379,19 +392,14 @@ def register_reservation_handlers(app):
                 logger.exception("Failed to post cancel-notfound message")
             return
 
-        # 취소 완료 메시지: 요약 부모 메시지 + 스레드 답글
+        # 취소 완료 메시지
         try:
-            parent = client.chat_postMessage(
+            client.chat_postMessage(
                 channel=RESERVE_CHANNEL_ID,
                 text=(
                     f"🗑️ 예약 취소: {removed['meeting_name']} | "
-                    f"{removed['date']} {removed['start']}~{removed['end']} | 예약자 {removed['reserver']}"
+                    f"{format_date_display(removed['date'])} {removed['start']}~{removed['end']} | 예약자 {removed['reserver']}"
                 ),
-            )
-            client.chat_postMessage(
-                channel=RESERVE_CHANNEL_ID,
-                thread_ts=parent["ts"],
-                text="✅ 예약이 취소되었습니다.",
             )
         except Exception:
             logger.exception("Failed to post cancel confirmation")
