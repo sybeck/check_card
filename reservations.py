@@ -1,0 +1,281 @@
+import os
+from datetime import datetime, timedelta
+
+from common import now_kst, script_dir, KST, RESERVE_CHANNEL_ID
+
+# =========================
+# Config / Storage
+# =========================
+RESV_FILE = os.path.join(script_dir(), "reservations.txt")
+
+# 미팅 소요시간 옵션 (라벨, 분)
+DURATION_OPTIONS = [
+    ("30분", 30),
+    ("1시간", 60),
+    ("1시간 30분", 90),
+    ("2시간", 120),
+    ("3시간", 180),
+    ("4시간", 240),
+]
+
+CALLBACK_ID = "reservation_submit"
+
+# 모달 block_id
+B_NAME = "b_name"
+B_RESERVER = "b_reserver"
+B_DATE = "b_date"
+B_START = "b_start"
+B_DURATION = "b_duration"
+
+
+# =========================
+# Storage helpers (txt = "메모장")
+# =========================
+def load_reservations():
+    """reservations.txt -> list[dict]"""
+    items = []
+    if not os.path.exists(RESV_FILE):
+        return items
+
+    with open(RESV_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < 8:
+                continue
+            try:
+                duration_min = int(parts[4])
+            except Exception:
+                duration_min = 0
+            items.append({
+                "id": parts[0],
+                "date": parts[1],
+                "start": parts[2],
+                "end": parts[3],
+                "duration_min": duration_min,
+                "meeting_name": parts[5],
+                "reserver": parts[6],
+                "created_at": parts[7],
+            })
+    return items
+
+
+def resv_start_end(resv):
+    """예약 dict -> (start_dt, end_dt) (KST). duration_min 기준으로 end 계산."""
+    start_dt = datetime.strptime(f"{resv['date']} {resv['start']}", "%Y-%m-%d %H:%M").replace(tzinfo=KST)
+    end_dt = start_dt + timedelta(minutes=resv["duration_min"])
+    return start_dt, end_dt
+
+
+def next_id() -> str:
+    """YYYYMMDD-순번 (당일 카운트 기준)."""
+    today = now_kst().strftime("%Y%m%d")
+    count = 0
+    for r in load_reservations():
+        if r["id"].startswith(today + "-"):
+            count += 1
+    return f"{today}-{count + 1}"
+
+
+def append_reservation(resv):
+    is_new = not os.path.exists(RESV_FILE)
+    with open(RESV_FILE, "a", encoding="utf-8") as f:
+        if is_new:
+            f.write("# Meeting room reservations\n")
+            f.write("# id\tdate\tstart\tend\tduration_min\tmeeting_name\treserver\tcreated_at\n")
+        f.write(
+            f"{resv['id']}\t{resv['date']}\t{resv['start']}\t{resv['end']}\t"
+            f"{resv['duration_min']}\t{resv['meeting_name']}\t{resv['reserver']}\t{resv['created_at']}\n"
+        )
+
+
+def find_conflict(new_start, new_end):
+    """기존 예약과 시간이 겹치면 해당 예약 dict를 리턴, 없으면 None. (회의실 1개)"""
+    for r in load_reservations():
+        ex_start, ex_end = resv_start_end(r)
+        # 같은 날 비교만 해도 충분하지만, datetime 비교로 일반화
+        if new_start < ex_end and ex_start < new_end:
+            return r
+    return None
+
+
+# =========================
+# Modal
+# =========================
+def build_reservation_modal():
+    return {
+        "type": "modal",
+        "callback_id": CALLBACK_ID,
+        "title": {"type": "plain_text", "text": "회의실 예약"},
+        "submit": {"type": "plain_text", "text": "예약"},
+        "close": {"type": "plain_text", "text": "취소"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": B_NAME,
+                "label": {"type": "plain_text", "text": "미팅명"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "예: 주간 기획 회의"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": B_RESERVER,
+                "label": {"type": "plain_text", "text": "예약자"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "예: 홍길동"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": B_DATE,
+                "label": {"type": "plain_text", "text": "미팅 일자"},
+                "element": {
+                    "type": "datepicker",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "날짜 선택"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": B_START,
+                "label": {"type": "plain_text", "text": "시작 시간"},
+                "element": {
+                    "type": "timepicker",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "시간 선택"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": B_DURATION,
+                "label": {"type": "plain_text", "text": "미팅 시간 (소요)"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "소요 시간 선택"},
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": label},
+                            "value": str(minutes),
+                        }
+                        for label, minutes in DURATION_OPTIONS
+                    ],
+                },
+            },
+        ],
+    }
+
+
+# =========================
+# Formatting
+# =========================
+def format_reservation_line(r) -> str:
+    return f"- {r['date']} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
+
+
+# =========================
+# Slack handler registration
+# =========================
+def register_reservation_handlers(app):
+    @app.command("/예약")
+    def open_reservation_modal(ack, body, client):
+        ack()
+        client.views_open(
+            trigger_id=body["trigger_id"],
+            view=build_reservation_modal(),
+        )
+
+    @app.view(CALLBACK_ID)
+    def handle_reservation_submit(ack, body, client, logger):
+        state = body["view"]["state"]["values"]
+        meeting_name = state[B_NAME]["value"]["value"].strip()
+        reserver = state[B_RESERVER]["value"]["value"].strip()
+        date_str = state[B_DATE]["value"]["selected_date"]
+        start_str = state[B_START]["value"]["selected_time"]
+        duration_min = int(state[B_DURATION]["value"]["selected_option"]["value"])
+
+        start_dt = datetime.strptime(f"{date_str} {start_str}", "%Y-%m-%d %H:%M").replace(tzinfo=KST)
+        end_dt = start_dt + timedelta(minutes=duration_min)
+        end_str = end_dt.strftime("%H:%M")
+
+        # 1) 과거 시간 거부
+        if start_dt < now_kst():
+            ack(
+                response_action="errors",
+                errors={B_DATE: "이미 지난 시간으로는 예약할 수 없습니다."},
+            )
+            return
+
+        # 2) 충돌 검사 (회의실 1개)
+        conflict = find_conflict(start_dt, end_dt)
+        if conflict:
+            ack(
+                response_action="errors",
+                errors={
+                    B_START: f"기존 예약과 겹칩니다: {conflict['meeting_name']} "
+                             f"({conflict['date']} {conflict['start']}~{conflict['end']})"
+                },
+            )
+            return
+
+        # 3) 저장
+        ack()
+        resv = {
+            "id": next_id(),
+            "date": date_str,
+            "start": start_str,
+            "end": end_str,
+            "duration_min": duration_min,
+            "meeting_name": meeting_name,
+            "reserver": reserver,
+            "created_at": now_kst().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            append_reservation(resv)
+        except Exception:
+            logger.exception("Failed to save reservation")
+            return
+
+        # 4) 완료 메시지: 요약 부모 메시지 + 스레드 답글
+        try:
+            parent = client.chat_postMessage(
+                channel=RESERVE_CHANNEL_ID,
+                text=(
+                    f"📅 새 예약: {meeting_name} | "
+                    f"{date_str} {start_str}~{end_str} | 예약자 {reserver}"
+                ),
+            )
+            client.chat_postMessage(
+                channel=RESERVE_CHANNEL_ID,
+                thread_ts=parent["ts"],
+                text="✅ 예약이 완료되었습니다.",
+            )
+        except Exception:
+            logger.exception("Failed to post reservation confirmation")
+
+    @app.command("/예약목록")
+    def list_reservations(ack, respond):
+        ack()
+        now = now_kst()
+        upcoming = []
+        for r in load_reservations():
+            _start_dt, end_dt = resv_start_end(r)
+            if end_dt >= now:
+                upcoming.append((end_dt, r))
+
+        if not upcoming:
+            respond("남아 있는 예약이 없습니다.")
+            return
+
+        # 날짜·시작시간 정렬
+        upcoming.sort(key=lambda x: resv_start_end(x[1])[0])
+        lines = ["🗓️ 남아 있는 회의실 예약"]
+        lines += [format_reservation_line(r) for _, r in upcoming]
+        respond("\n".join(lines))
