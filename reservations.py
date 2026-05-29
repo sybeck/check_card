@@ -19,6 +19,7 @@ DURATION_OPTIONS = [
 ]
 
 CALLBACK_ID = "reservation_submit"
+CANCEL_CALLBACK_ID = "reservation_cancel"
 
 # 모달 block_id
 B_NAME = "b_name"
@@ -26,6 +27,7 @@ B_RESERVER = "b_reserver"
 B_DATE = "b_date"
 B_START = "b_start"
 B_DURATION = "b_duration"
+B_CANCEL_SELECT = "b_cancel_select"
 
 
 # =========================
@@ -79,16 +81,45 @@ def next_id() -> str:
     return f"{today}-{count + 1}"
 
 
+def _row_line(resv) -> str:
+    return (
+        f"{resv['id']}\t{resv['date']}\t{resv['start']}\t{resv['end']}\t"
+        f"{resv['duration_min']}\t{resv['meeting_name']}\t{resv['reserver']}\t{resv['created_at']}\n"
+    )
+
+
+def _write_header(f):
+    f.write("# Meeting room reservations\n")
+    f.write("# id\tdate\tstart\tend\tduration_min\tmeeting_name\treserver\tcreated_at\n")
+
+
 def append_reservation(resv):
     is_new = not os.path.exists(RESV_FILE)
     with open(RESV_FILE, "a", encoding="utf-8") as f:
         if is_new:
-            f.write("# Meeting room reservations\n")
-            f.write("# id\tdate\tstart\tend\tduration_min\tmeeting_name\treserver\tcreated_at\n")
-        f.write(
-            f"{resv['id']}\t{resv['date']}\t{resv['start']}\t{resv['end']}\t"
-            f"{resv['duration_min']}\t{resv['meeting_name']}\t{resv['reserver']}\t{resv['created_at']}\n"
-        )
+            _write_header(f)
+        f.write(_row_line(resv))
+
+
+def remove_reservation(resv_id) -> dict:
+    """resv_id에 해당하는 예약을 파일에서 제거. 제거한 예약 dict 리턴, 없으면 None."""
+    items = load_reservations()
+    removed = None
+    keep = []
+    for r in items:
+        if r["id"] == resv_id and removed is None:
+            removed = r
+        else:
+            keep.append(r)
+
+    if removed is None:
+        return None
+
+    with open(RESV_FILE, "w", encoding="utf-8") as f:
+        _write_header(f)
+        for r in keep:
+            f.write(_row_line(r))
+    return removed
 
 
 def find_conflict(new_start, new_end):
@@ -180,6 +211,46 @@ def format_reservation_line(r) -> str:
     return f"- {r['date']} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
 
 
+def upcoming_reservations():
+    """아직 끝나지 않은 예약을 시작시간 순으로 리턴."""
+    now = now_kst()
+    items = [r for r in load_reservations() if resv_start_end(r)[1] >= now]
+    items.sort(key=lambda r: resv_start_end(r)[0])
+    return items
+
+
+def build_cancel_modal(upcoming):
+    """취소할 예약을 고르는 드롭다운 모달. upcoming: 남은 예약 list."""
+    options = []
+    for r in upcoming:
+        label = f"{r['date']} {r['start']}~{r['end']} {r['meeting_name']} (예약자 {r['reserver']})"
+        options.append({
+            "text": {"type": "plain_text", "text": label[:75]},  # Slack 옵션 텍스트 75자 제한
+            "value": r["id"],
+        })
+
+    return {
+        "type": "modal",
+        "callback_id": CANCEL_CALLBACK_ID,
+        "title": {"type": "plain_text", "text": "회의실 예약 취소"},
+        "submit": {"type": "plain_text", "text": "취소하기"},
+        "close": {"type": "plain_text", "text": "닫기"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": B_CANCEL_SELECT,
+                "label": {"type": "plain_text", "text": "취소할 예약"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "예약 선택"},
+                    "options": options,
+                },
+            },
+        ],
+    }
+
+
 # =========================
 # Slack handler registration
 # =========================
@@ -263,19 +334,64 @@ def register_reservation_handlers(app):
     @app.command("/예약목록")
     def list_reservations(ack, respond):
         ack()
-        now = now_kst()
-        upcoming = []
-        for r in load_reservations():
-            _start_dt, end_dt = resv_start_end(r)
-            if end_dt >= now:
-                upcoming.append((end_dt, r))
+        upcoming = upcoming_reservations()
 
         if not upcoming:
-            respond("남아 있는 예약이 없습니다.")
+            respond(response_type="in_channel", text="남아 있는 예약이 없습니다.")
             return
 
-        # 날짜·시작시간 정렬
-        upcoming.sort(key=lambda x: resv_start_end(x[1])[0])
-        lines = ["🗓️ 남아 있는 회의실 예약"]
-        lines += [format_reservation_line(r) for _, r in upcoming]
-        respond("\n".join(lines))
+        lines = ["🗓️ 회의실 예약 현황입니다\n"]
+        lines += [format_reservation_line(r) for r in upcoming]
+        respond(response_type="in_channel", text="\n".join(lines))
+
+    @app.command("/예약취소")
+    def open_cancel_modal(ack, body, client, respond):
+        ack()
+        upcoming = upcoming_reservations()
+        if not upcoming:
+            respond(response_type="ephemeral", text="취소할 예약이 없습니다.")
+            return
+        client.views_open(
+            trigger_id=body["trigger_id"],
+            view=build_cancel_modal(upcoming),
+        )
+
+    @app.view(CANCEL_CALLBACK_ID)
+    def handle_cancel_submit(ack, body, client, logger):
+        ack()
+        state = body["view"]["state"]["values"]
+        resv_id = state[B_CANCEL_SELECT]["value"]["selected_option"]["value"]
+
+        try:
+            removed = remove_reservation(resv_id)
+        except Exception:
+            logger.exception("Failed to cancel reservation")
+            return
+
+        if removed is None:
+            # 이미 취소되었거나 사라진 예약
+            try:
+                client.chat_postMessage(
+                    channel=RESERVE_CHANNEL_ID,
+                    text="⚠️ 선택한 예약을 찾을 수 없습니다 (이미 취소되었을 수 있어요).",
+                )
+            except Exception:
+                logger.exception("Failed to post cancel-notfound message")
+            return
+
+        # 취소 완료 메시지: 요약 부모 메시지 + 스레드 답글
+        try:
+            parent = client.chat_postMessage(
+                channel=RESERVE_CHANNEL_ID,
+                text=(
+                    f"🗑️ 예약 취소: {removed['meeting_name']} | "
+                    f"{removed['date']} {removed['start']}~{removed['end']} | 예약자 {removed['reserver']}"
+                ),
+            )
+            client.chat_postMessage(
+                channel=RESERVE_CHANNEL_ID,
+                thread_ts=parent["ts"],
+                text="✅ 예약이 취소되었습니다.",
+            )
+        except Exception:
+            logger.exception("Failed to post cancel confirmation")
