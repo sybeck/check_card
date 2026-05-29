@@ -20,10 +20,10 @@ def build_today_message() -> str:
             todays.append((start_dt, r))
 
     if not todays:
-        return "오늘 예약된 회의실이 없습니다."
+        return "오늘 예약된 회의실이 없습니다❌"
 
     todays.sort(key=lambda x: x[0])
-    lines = ["오늘의 회의실 예약"]
+    lines = ["👇오늘의 회의실 예약👇"]
     lines += [format_reservation_line(r) for _, r in todays]
     return "\n".join(lines)
 
