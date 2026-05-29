@@ -22,7 +22,7 @@ if not SLACK_BOT_TOKEN or not SLACK_APP_TOKEN:
     raise RuntimeError("환경변수 SLACK_BOT_TOKEN(xoxb-...), SLACK_APP_TOKEN(xapp-...)가 필요합니다. (.env 확인)")
 
 # 새 예약 채널 ID — 실제 채널 ID로 교체하세요. (.env 아님, 코드에 직접 기입)
-RESERVE_CHANNEL_ID = "C0XXXXXXXXX"
+RESERVE_CHANNEL_ID = "C0B6V5SDHQV"
 
 
 # =========================
