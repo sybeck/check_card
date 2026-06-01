@@ -1,12 +1,12 @@
 import os
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
 
-from common import now_kst, month_key, script_dir, dedup_seen, SLACK_BOT_TOKEN, KST
+from common import now_kst, script_dir, dedup_seen, SLACK_BOT_TOKEN, KST
 
 # =========================
 # Config
@@ -16,6 +16,8 @@ CARDS_KEEP = {
     "2924", "7467", "2227", "0011", "6290", "1347", "0533", "8284", "8419", "8558",
 }
 CARD_LIMIT = 270_000  # 카드별 월 한도
+
+PERIOD_START_DAY = 3  # 정산 주기 시작일 (당월 3일 ~ 익월 2일)
 
 COL_DT = "이용일시"
 COL_APPR = "승인번호"
@@ -52,6 +54,31 @@ def normalize_amount(v) -> int:
     except Exception:
         digits = re.sub(r"[^\d\-]", "", s)
         return int(digits) if digits else 0
+
+
+def period_bounds(dt: datetime):
+    """dt가 속한 정산 주기(당월 3일 00:00 ~ 익월 2일 23:59:59)의 시작/끝과 키를 반환.
+    키는 주기 시작 월 기준 YYYYMM."""
+    if dt.day >= PERIOD_START_DAY:
+        start_year, start_month = dt.year, dt.month
+    else:
+        # 1~2일이면 직전 달에 시작한 주기에 속함
+        if dt.month == 1:
+            start_year, start_month = dt.year - 1, 12
+        else:
+            start_year, start_month = dt.year, dt.month - 1
+
+    start = datetime(start_year, start_month, PERIOD_START_DAY, 0, 0, 0, tzinfo=KST)
+
+    if start_month == 12:
+        end_year, end_month = start_year + 1, 1
+    else:
+        end_year, end_month = start_year, start_month + 1
+    # 익월 시작일 직전(= 익월 2일 23:59:59)
+    end = datetime(end_year, end_month, PERIOD_START_DAY, 0, 0, 0, tzinfo=KST) - timedelta(seconds=1)
+
+    period_key = f"{start_year:04d}{start_month:02d}"
+    return start, end, period_key
 
 
 def parse_dt_kst(v):
@@ -155,8 +182,8 @@ def run_pipeline(excel_path: str):
     """
     outdir = script_dir()
     kst_now = now_kst()
-    yyyymm = month_key(kst_now)
-    out_txt = os.path.join(outdir, f"corp_cards_{yyyymm}.txt")
+    period_start, period_end, period_key = period_bounds(kst_now)
+    out_txt = os.path.join(outdir, f"corp_cards_{period_key}.txt")
 
     df = read_excel_auto(excel_path)
 
@@ -172,7 +199,7 @@ def run_pipeline(excel_path: str):
         dt = parse_dt_kst(r.get(col_dt))
         if not dt:
             continue
-        if dt.year != kst_now.year or dt.month != kst_now.month:
+        if not (period_start <= dt <= period_end):
             continue
 
         approval = normalize_approval(r.get(col_appr))
@@ -187,7 +214,7 @@ def run_pipeline(excel_path: str):
         rows.append((dt, approval, last4, amt))
 
     new_rows = [x for x in rows if x[1] not in existing]
-    added = append_rows(out_txt, yyyymm, new_rows)
+    added = append_rows(out_txt, period_key, new_rows)
 
     used_cards, total_sum = totals_from_txt(out_txt)
     return out_txt, added, used_cards, total_sum
