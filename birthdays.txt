@@ -1,0 +1,4 @@
+# Employee birthdays
+# name	MM-DD
+홍길동	03-15
+김철수	06-12
