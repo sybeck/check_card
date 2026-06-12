@@ -26,7 +26,7 @@ RESERVE_CHANNEL_ID = "C0B6V5SDHQV"
 
 # 생일 알림 — 실제 값으로 교체하세요. (.env 아님, 코드에 직접 기입)
 BIRTHDAY_CHANNEL_ID = "C09DUU8SHDW"      # 오늘 생일 축하 메시지를 보낼 채널 ID (예: C0XXXXXXX)
-MY_SLACK_USER_ID = "D046RD10EF6"         # 3일 뒤 생일 DM을 받을 내 Slack member ID (예: U0XXXXXXX)
+MY_SLACK_USER_ID = "U046NV3LGH0"         # 3일 뒤 생일 DM을 받을 내 Slack member ID (예: U0XXXXXXX)
 
 
 # =========================
