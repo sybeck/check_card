@@ -1,0 +1,18 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+
+# runtime / data dumps
+.slack_dedup.json
+logs/
+downloads/
+
+# excel / 내역 원본 파일
+*.xls
+*.xlsx
