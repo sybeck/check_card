@@ -140,6 +140,11 @@ def build_report(since: str, until: str) -> dict:
     raw_rows = creative.fetch_creative_insights(token, ad_account, since, until)
     rows = [creative.normalize_row(r) for r in raw_rows]
 
+    # 전체 필터: 집계 시작일 기준 YYMM(년도 뒤 2자리+월)이 광고명에 포함된
+    # = '당월에 제작된 콘텐츠'만 집계 대상으로 남긴다. 예) 2026-06-08 -> "2606"
+    yymm = since[2:4] + since[5:7]
+    rows = [r for r in rows if yymm in (r.get(NAME_K) or "")]
+
     keywords = load_keywords()
     kw_acc = {kw: _blank_acc(kw) for kw in keywords}
     unclassified = _blank_acc(UNCLASSIFIED_LABEL)
@@ -163,6 +168,7 @@ def build_report(since: str, until: str) -> dict:
         "period": (since, until),
         "generated_at": now_kst().strftime("%Y-%m-%d %H:%M:%S"),
         "account": "brainology",
+        "yymm": yymm,
         "groups": groups,
         "total": _finalize(total),
         "row_count": len(rows),

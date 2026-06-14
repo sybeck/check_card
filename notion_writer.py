@@ -23,14 +23,14 @@ load_dotenv()
 # 본문 표 컬럼 (키워드 + 지표 8개)
 TABLE_HEADERS = [
     "키워드",
+    "구매전환값",
+    "ROAS",
+    "구매당비용",
+    "유입대비전환율",
+    "객단가",
+    "구매",
     "지출",
     "CPC",
-    "유입대비전환율",
-    "구매",
-    "구매전환값",
-    "구매당비용",
-    "ROAS",
-    "객단가",
 ]
 
 PERIOD_PROP = "기간"
@@ -67,14 +67,14 @@ def _row_cells(g: dict) -> list:
     """그룹 dict -> 표 한 행(문자열 리스트). TABLE_HEADERS 순서."""
     return [
         g["label"],
+        _fmt_money(g["revenue"]),
+        _fmt_roas(g["roas"]),
+        _fmt_money(g["cpa"]),
+        _fmt_pct(g["conv_rate"]),
+        _fmt_money(g["aov"]),
+        f"{g['purchases']:,}",
         _fmt_money(g["spend"]),
         _fmt_money(g["cpc"]),
-        _fmt_pct(g["conv_rate"]),
-        f"{g['purchases']:,}",
-        _fmt_money(g["revenue"]),
-        _fmt_money(g["cpa"]),
-        _fmt_roas(g["roas"]),
-        _fmt_money(g["aov"]),
     ]
 
 
@@ -102,7 +102,7 @@ def _build_children(report: dict) -> list:
             "object": "block",
             "type": "heading_3",
             "heading_3": {
-                "rich_text": _rich(f"📊 성과 집계 ({since} ~ {until})")
+                "rich_text": _rich("📊 성과 집계 (당월에 제작된 콘텐츠 한정 집계)")
             },
         },
         {
@@ -110,8 +110,8 @@ def _build_children(report: dict) -> list:
             "type": "paragraph",
             "paragraph": {
                 "rich_text": _rich(
-                    f"대상: {report['account']} · 집계일시: {report['generated_at']} · "
-                    f"수집 행수: {report['row_count']}"
+                    f"기간: {since} ~ {until} · 대상: {report['account']} · "
+                    f"집계일시: {report['generated_at']} · 수집 행수: {report['row_count']}"
                 )
             },
         },
