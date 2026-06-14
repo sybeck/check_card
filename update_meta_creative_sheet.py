@@ -117,7 +117,7 @@ def main():
         if not raw_rows:
             print("[INFO] 수집된 데이터가 없습니다. 변경 없이 종료합니다.")
             notify_slack(
-                f"ℹ️ 메타 광고소재 시트 업데이트 ({since}~{until})\n"
+                f"ℹ️ 메타 광고 raw 데이터 업데이트 ({since}~{until})\n"
                 f"수집된 데이터가 없어 변경 사항이 없습니다."
             )
             return
@@ -133,7 +133,7 @@ def main():
         )
 
         notify_slack(
-            f"✅ 메타 광고소재 시트 업데이트 완료 (brainology)\n"
+            f"✅ 메타 광고 raw 데이터 업데이트 완료 (brainology)\n"
             f"• 기간: {since} ~ {until}\n"
             f"• 반영: 갱신 {result['updated']}행 / 신규 {result['appended']}행\n"
             f"• 지출 {totals['spend']:,.0f}원 · 구매 {totals['purchases']}건 · "
@@ -142,7 +142,7 @@ def main():
     except Exception as e:
         # 스케줄러 무인 실행 중 실패를 놓치지 않도록 슬랙으로 알린 뒤 에러를 다시 던진다.
         notify_slack(
-            f"⚠️ 메타 광고소재 시트 업데이트 실패 ({since}~{until})\n"
+            f"⚠️ 메타 광고 raw 데이터 업데이트 실패 ({since}~{until})\n"
             f"{type(e).__name__}: {e}"
         )
         raise
