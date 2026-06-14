@@ -44,7 +44,7 @@ def notify_slack(text: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="주간 성과 집계 → 노션 기록 → 슬랙 알림")
+    parser = argparse.ArgumentParser(description="주간 Meta 광고 성과 개인별 집계 → 노션 기록 → 슬랙 알림")
     parser.add_argument("--since", default="", help="YYYY-MM-DD (수동 지정 시)")
     parser.add_argument("--until", default="", help="YYYY-MM-DD (수동 지정 시)")
     args = parser.parse_args()
@@ -54,7 +54,7 @@ def main():
     else:
         since, until = prev_week_range()
 
-    print(f"[INFO] 주간 성과 집계: brainology | {since} ~ {until} (KST)")
+    print(f"[INFO] 주간 Meta 광고 성과 개인별 집계: brainology | {since} ~ {until} (KST)")
 
     try:
         report = perf.build_report(since, until)
@@ -63,13 +63,13 @@ def main():
         t = report["total"]
         print(f"[DONE] 노션 기록 완료 — {url}")
         notify_slack(
-            f"✅ 주간 성과 집계 완료 ({since} ~ {until})\n"
+            f"✅ 주간 Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
             f"키워드 {kw_count}개 집계 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
             f"🔗 {url}"
         )
     except Exception as e:
         notify_slack(
-            f"⚠️ 주간 성과 집계 실패 ({since} ~ {until})\n{type(e).__name__}: {e}"
+            f"⚠️ 주간 Meta 광고 성과 개인별 집계 실패 ({since} ~ {until})\n{type(e).__name__}: {e}"
         )
         raise
 

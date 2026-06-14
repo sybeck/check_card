@@ -1,5 +1,5 @@
 """
-성과 집계 결과를 노션 데이터베이스에 한 페이지로 기록한다.
+Meta 광고 성과 개인별 집계 결과를 노션 데이터베이스에 한 페이지로 기록한다.
 
 의존성: notion-client
   pip install notion-client
@@ -132,7 +132,7 @@ def _build_children(report: dict) -> list:
             "object": "block",
             "type": "heading_3",
             "heading_3": {
-                "rich_text": _rich("📊 성과 집계 (당월에 제작된 콘텐츠 한정 집계)")
+                "rich_text": _rich("📊 Meta 광고 성과 개인별 집계 (당월에 제작된 콘텐츠 한정 집계)")
             },
         },
         {

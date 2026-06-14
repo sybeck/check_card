@@ -97,7 +97,7 @@ def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
         return
 
     client.chat_postMessage(
-        channel=channel, thread_ts=thread_ts, text=f"⏳ 성과 집계 중… ({since} ~ {until})"
+        channel=channel, thread_ts=thread_ts, text=f"⏳ Meta 광고 성과 개인별 집계 중… ({since} ~ {until})"
     )
 
     try:
@@ -111,7 +111,7 @@ def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
             channel=channel,
             thread_ts=thread_ts,
             text=(
-                f"✅ 성과 집계 완료 ({since} ~ {until})\n"
+                f"✅ Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
                 f"키워드 {kw_count}개 집계 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
                 f"🔗 {url}"
             ),
@@ -120,7 +120,7 @@ def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
         client.chat_postMessage(
             channel=channel,
             thread_ts=thread_ts,
-            text=f"성과 집계 실패 ❌\n{type(e).__name__}: {e}",
+            text=f"Meta 광고 성과 개인별 집계 실패 ❌\n{type(e).__name__}: {e}",
         )
 
 
@@ -179,7 +179,7 @@ def register_meta_handlers(app):
         thread_ts = event.get("thread_ts") or event.get("ts")  # 스레드 안이면 같은 스레드에 답글
         text = event.get("text", "")
 
-        # 성과 집계: "@봇 성과 0601-0612"
+        # Meta 광고 성과 개인별 집계: "@봇 성과 0601-0612"
         if "성과" in text:
             if dedup_seen(f"perf:{event.get('ts')}"):  # Slack 이벤트 재시도 중복 방지
                 return
