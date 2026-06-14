@@ -59,12 +59,11 @@ def main():
     try:
         report = perf.build_report(since, until)
         url = notion_writer.create_performance_page(report)
-        kw_count = len(report["groups"]) - 1  # 미분류 제외
         t = report["total"]
         print(f"[DONE] 노션 기록 완료 — {url}")
         notify_slack(
             f"✅ 주간 Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
-            f"키워드 {kw_count}개 집계 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
+            f"총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
             f"🔗 {url}"
         )
     except Exception as e:

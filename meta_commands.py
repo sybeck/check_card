@@ -105,14 +105,13 @@ def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
         import notion_writer
 
         url = notion_writer.create_performance_page(report)
-        kw_count = len(report["groups"]) - 1  # 미분류 제외 키워드 수
         t = report["total"]
         client.chat_postMessage(
             channel=channel,
             thread_ts=thread_ts,
             text=(
                 f"✅ Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
-                f"키워드 {kw_count}개 집계 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
+                f"총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
                 f"🔗 {url}"
             ),
         )
