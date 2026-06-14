@@ -31,6 +31,9 @@ MY_SLACK_USER_ID = "U046NV3LGH0"         # 3일 뒤 생일 DM을 받을 내 Slac
 # 메타 광고소재 시트 업데이트 결과 알림 채널 ID
 META_CREATIVE_CHANNEL_ID = "C0AJ2M6KDFE"
 
+# 주간 성과 집계(자동) 결과 알림 채널 ID
+PERF_WEEKLY_CHANNEL_ID = "C0A24HBHNFN"
+
 
 # =========================
 # Time helpers
