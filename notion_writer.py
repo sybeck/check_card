@@ -33,6 +33,20 @@ TABLE_HEADERS = [
     "CPC",
 ]
 
+# 제품별 성과 표 컬럼 (키워드 + 제품 + 지표 8개)
+PRODUCT_TABLE_HEADERS = [
+    "키워드",
+    "제품",
+    "구매전환값",
+    "ROAS",
+    "구매당비용",
+    "유입대비전환율",
+    "객단가",
+    "구매",
+    "지출",
+    "CPC",
+]
+
 PERIOD_PROP = "기간"
 GENERATED_PROP = "집계일시"
 
@@ -78,6 +92,22 @@ def _row_cells(g: dict) -> list:
     ]
 
 
+def _product_row_cells(g: dict) -> list:
+    """제품별 성과 한 행. PRODUCT_TABLE_HEADERS 순서."""
+    return [
+        g["keyword"],
+        g["product"],
+        _fmt_money(g["revenue"]),
+        _fmt_roas(g["roas"]),
+        _fmt_money(g["cpa"]),
+        _fmt_pct(g["conv_rate"]),
+        _fmt_money(g["aov"]),
+        f"{g['purchases']:,}",
+        _fmt_money(g["spend"]),
+        _fmt_money(g["cpc"]),
+    ]
+
+
 def _rich(text: str) -> list:
     return [{"type": "text", "text": {"content": str(text)}}]
 
@@ -97,7 +127,7 @@ def _build_children(report: dict) -> list:
     table_children = [_table_row(TABLE_HEADERS)]
     table_children += [_table_row(_row_cells(g)) for g in rows]
 
-    return [
+    children = [
         {
             "object": "block",
             "type": "heading_3",
@@ -126,6 +156,31 @@ def _build_children(report: dict) -> list:
             },
         },
     ]
+
+    # 제품별 성과 표 (지출 0 행은 build_report 단계에서 이미 제외)
+    product_groups = report.get("product_groups") or []
+    if product_groups:
+        prod_children = [_table_row(PRODUCT_TABLE_HEADERS)]
+        prod_children += [_table_row(_product_row_cells(g)) for g in product_groups]
+        children += [
+            {
+                "object": "block",
+                "type": "heading_3",
+                "heading_3": {"rich_text": _rich("🧩 제품별 성과")},
+            },
+            {
+                "object": "block",
+                "type": "table",
+                "table": {
+                    "table_width": len(PRODUCT_TABLE_HEADERS),
+                    "has_column_header": True,
+                    "has_row_header": False,
+                    "children": prod_children,
+                },
+            },
+        ]
+
+    return children
 
 
 def _resolve_schema_and_parent(client, db_id: str):

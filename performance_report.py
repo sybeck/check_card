@@ -30,6 +30,13 @@ NAME_K = "광고 이름"
 UNCLASSIFIED_LABEL = "미분류"
 TOTAL_LABEL = "합계"
 
+# 제품 분해: (제품명, 광고명 포함 토큰). 광고 이름에 토큰이 있으면 해당 제품으로 집계.
+PRODUCTS = [
+    ("뉴턴젤리", "젤리"),
+    ("오메가3", "오메가"),
+    ("유산균", "유산균"),
+]
+
 
 def must_env(key: str) -> str:
     v = os.getenv(key, "").strip()
@@ -149,6 +156,7 @@ def build_report(since: str, until: str) -> dict:
     kw_acc = {kw: _blank_acc(kw) for kw in keywords}
     unclassified = _blank_acc(UNCLASSIFIED_LABEL)
     total = _blank_acc(TOTAL_LABEL)
+    prod_acc = {}  # (keyword, product) -> acc
 
     for row in rows:
         name = row.get(NAME_K) or ""
@@ -157,6 +165,15 @@ def build_report(since: str, until: str) -> dict:
             if kw and kw in name:
                 _add(kw_acc[kw], row)
                 matched = True  # 독립 매칭: 여러 키워드에 중복 합산 가능
+                # 키워드 안에서 제품 단위로 다시 분해
+                for plabel, ptoken in PRODUCTS:
+                    if ptoken in name:
+                        key = (kw, plabel)
+                        acc = prod_acc.get(key)
+                        if acc is None:
+                            acc = _blank_acc(plabel)
+                            prod_acc[key] = acc
+                        _add(acc, row)
         if not matched:
             _add(unclassified, row)
         _add(total, row)  # 합계는 전체 광고 1회씩
@@ -164,12 +181,25 @@ def build_report(since: str, until: str) -> dict:
     groups = [_finalize(kw_acc[kw]) for kw in keywords]
     groups.append(_finalize(unclassified))
 
+    # 제품별 성과: 키워드→제품 순서로 정렬, 지출 0 행은 제외
+    product_groups = []
+    for kw in keywords:
+        for plabel, _ in PRODUCTS:
+            acc = prod_acc.get((kw, plabel))
+            if not acc or acc["spend"] <= 0:
+                continue
+            f = _finalize(acc)
+            f["keyword"] = kw
+            f["product"] = plabel
+            product_groups.append(f)
+
     return {
         "period": (since, until),
         "generated_at": now_kst().strftime("%Y-%m-%d %H:%M:%S"),
         "account": "brainology",
         "yymm": yymm,
         "groups": groups,
+        "product_groups": product_groups,
         "total": _finalize(total),
         "row_count": len(rows),
     }
