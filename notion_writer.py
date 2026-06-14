@@ -128,10 +128,32 @@ def _build_children(report: dict) -> list:
     ]
 
 
-def _build_properties(db_schema: dict, report: dict) -> dict:
+def _resolve_schema_and_parent(client, db_id: str):
+    """
+    DB의 속성 스키마와 페이지 생성용 parent 를 반환.
+    구형(API): databases.retrieve 가 properties 를 직접 제공 → parent=database_id
+    신형(데이터 소스 모델): properties 가 비어 있고 data_sources 제공
+        → 데이터 소스에서 properties 조회, parent=data_source_id
+    """
+    db = client.databases.retrieve(database_id=db_id)
+    props = db.get("properties") or {}
+    if props:
+        return props, {"database_id": db_id}
+
+    data_sources = db.get("data_sources") or []
+    if not data_sources:
+        raise RuntimeError(
+            "노션 DB에서 속성을 찾지 못했습니다 (properties/data_sources 모두 비어 있음). "
+            "통합 연결/DB ID를 확인하세요."
+        )
+    ds_id = data_sources[0]["id"]
+    ds = client.request(path=f"data_sources/{ds_id}", method="GET")
+    return (ds.get("properties") or {}), {"type": "data_source_id", "data_source_id": ds_id}
+
+
+def _build_properties(props_schema: dict, report: dict) -> dict:
     """DB 스키마에 맞춰 제목 + 기간 + 집계일시 속성을 구성. 없는 속성은 건너뛴다."""
     since, until = report["period"]
-    props_schema = db_schema.get("properties", {})
     properties = {}
 
     # 1) title 타입 속성 자동탐지 -> 제목
@@ -169,12 +191,12 @@ def create_performance_page(report: dict) -> str:
     db_id = _extract_db_id(_must_env("NOTION_PERFORMANCE_DB_ID"))
 
     client = Client(auth=token)
-    db_schema = client.databases.retrieve(database_id=db_id)
-    properties = _build_properties(db_schema, report)
+    props_schema, parent = _resolve_schema_and_parent(client, db_id)
+    properties = _build_properties(props_schema, report)
     children = _build_children(report)
 
     page = client.pages.create(
-        parent={"database_id": db_id},
+        parent=parent,
         properties=properties,
         children=children,
     )
