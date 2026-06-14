@@ -14,11 +14,20 @@ import requests
 from meta_ads_current import (
     GRAPH_BASE,
     TIMEOUT,
-    PURCHASE_ACTION_KEYS,
     normalize_act_id,
     safe_json,
-    parse_purchases_from_actions,
 )
+
+# 구매/구매전환값 집계용 단일 action_type 우선순위.
+# 메타는 한 건의 구매를 여러 버킷(purchase / omni_purchase /
+# offsite_conversion.fb_pixel_purchase / onsite_web_purchase ...)에 중복 보고하므로
+# 절대 합산하지 않고 아래 우선순위에서 '존재하는 첫 번째' 하나만 사용한다.
+# 'purchase' 표준 이벤트 기준으로 집계(구매 건수 / 구매전환값 동일 기준).
+PURCHASE_TYPE_PRIORITY = [
+    "purchase",
+    "omni_purchase",
+    "offsite_conversion.fb_pixel_purchase",
+]
 
 # raw fetch 시 요청하는 필드
 INSIGHT_FIELDS = (
@@ -47,23 +56,27 @@ COLUMNS = [
 ]
 
 
-def parse_purchase_value_from_action_values(action_values) -> float:
-    """action_values 리스트에서 purchase 매출 합계를 파싱한다."""
-    if not action_values:
+def pick_purchase_value(items) -> float:
+    """
+    actions / action_values 리스트에서 '구매' 값을 단일 action_type 기준으로 뽑는다.
+    PURCHASE_TYPE_PRIORITY 순서대로 존재하는 첫 type 하나만 사용(합산 금지 → 중복 집계 방지).
+    """
+    if not items:
         return 0.0
-    total = 0.0
-    for a in action_values:
+    by_type = {}
+    for a in items:
         at = (a.get("action_type") or "").strip()
         val = a.get("value")
         if val is None:
             continue
-        is_purchase = (at in PURCHASE_ACTION_KEYS) or at.endswith(".purchase")
-        if is_purchase:
-            try:
-                total += float(val)
-            except Exception:
-                pass
-    return total
+        try:
+            by_type[at] = float(val)
+        except Exception:
+            pass
+    for t in PURCHASE_TYPE_PRIORITY:
+        if t in by_type:
+            return by_type[t]
+    return 0.0
 
 
 def fetch_creative_insights(
@@ -147,8 +160,8 @@ def normalize_row(raw: dict) -> Dict[str, object]:
     except Exception:
         link_clicks = 0
 
-    purchases = parse_purchases_from_actions(raw.get("actions"))
-    revenue = parse_purchase_value_from_action_values(raw.get("action_values"))
+    purchases = int(pick_purchase_value(raw.get("actions")))
+    revenue = pick_purchase_value(raw.get("action_values"))
 
     roas = _safe_div(revenue, spend)
     cpa = _safe_div(spend, purchases)
