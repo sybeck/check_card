@@ -1,0 +1,9 @@
+slack-bolt
+slack-sdk
+requests
+pandas
+openpyxl
+xlrd
+python-dotenv
+gspread
+google-auth
