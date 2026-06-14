@@ -214,7 +214,7 @@ def _build_properties(props_schema: dict, report: dict) -> dict:
     # 1) title 타입 속성 자동탐지 -> 제목
     for name, meta in props_schema.items():
         if meta.get("type") == "title":
-            properties[name] = {"title": _rich(f"Meta 광고 성과 개인별 집계 {since}~{until}")}
+            properties[name] = {"title": _rich("Meta 광고 성과 개인별 집계")}
             break
 
     # 2) '기간' 속성: date 면 범위, rich_text 면 문자열
