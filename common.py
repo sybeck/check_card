@@ -28,6 +28,9 @@ RESERVE_CHANNEL_ID = "C0B6V5SDHQV"
 BIRTHDAY_CHANNEL_ID = "C09DUU8SHDW"      # 오늘 생일 축하 메시지를 보낼 채널 ID (예: C0XXXXXXX)
 MY_SLACK_USER_ID = "U046NV3LGH0"         # 3일 뒤 생일 DM을 받을 내 Slack member ID (예: U0XXXXXXX)
 
+# 메타 광고소재 시트 업데이트 결과 알림 채널 ID
+META_CREATIVE_CHANNEL_ID = "C0AJ2M6KDFE"
+
 
 # =========================
 # Time helpers

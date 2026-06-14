@@ -28,11 +28,37 @@ sys.path.insert(
 )
 import meta_ads_creative as creative  # noqa: E402
 
+from slack_sdk import WebClient  # noqa: E402
+
 from gsheets import get_worksheet, upsert_rows  # noqa: E402
+from common import SLACK_BOT_TOKEN, META_CREATIVE_CHANNEL_ID  # noqa: E402
 
 load_dotenv()
 
 KST = timezone(timedelta(hours=9))
+
+
+def notify_slack(text: str) -> None:
+    """결과 요약을 Slack 채널로 전송. 실패해도 스크립트 자체는 죽지 않는다."""
+    if not META_CREATIVE_CHANNEL_ID:
+        print("[WARN] META_CREATIVE_CHANNEL_ID가 비어 있어 슬랙 전송을 건너뜁니다. (common.py 확인)")
+        return
+    try:
+        WebClient(token=SLACK_BOT_TOKEN).chat_postMessage(
+            channel=META_CREATIVE_CHANNEL_ID, text=text
+        )
+        print(f"[INFO] 슬랙 전송 완료 -> {META_CREATIVE_CHANNEL_ID}")
+    except Exception as e:
+        print(f"[WARN] 슬랙 전송 실패: {e}")
+
+
+def summarize_totals(rows) -> dict:
+    """수집 행 전체의 합계(지출/구매/매출)와 ROAS 계산."""
+    spend = sum(float(r.get("지출 금액(KRW)") or 0) for r in rows)
+    purchases = sum(int(r.get("구매") or 0) for r in rows)
+    revenue = sum(float(r.get("구매 전환값") or 0) for r in rows)
+    roas = (revenue / spend) if spend else 0.0
+    return {"spend": spend, "purchases": purchases, "revenue": revenue, "roas": roas}
 
 
 def must_env(key: str) -> str:
@@ -81,24 +107,45 @@ def main():
     since, until = resolve_range(args)
     print(f"[INFO] Meta 광고소재 수집: brainology | {since} ~ {until} (KST)")
 
-    token = must_env("META_BRAINOLOGY_ACCESS_TOKEN")
-    ad_account = must_env("META_BRAINOLOGY_AD_ACCOUNT_ID")
+    try:
+        token = must_env("META_BRAINOLOGY_ACCESS_TOKEN")
+        ad_account = must_env("META_BRAINOLOGY_AD_ACCOUNT_ID")
 
-    raw_rows = creative.fetch_creative_insights(token, ad_account, since, until)
-    print(f"[INFO] API 수집 행수: {len(raw_rows)}")
+        raw_rows = creative.fetch_creative_insights(token, ad_account, since, until)
+        print(f"[INFO] API 수집 행수: {len(raw_rows)}")
 
-    if not raw_rows:
-        print("[INFO] 수집된 데이터가 없습니다. 전송 없이 종료합니다.")
-        return
+        if not raw_rows:
+            print("[INFO] 수집된 데이터가 없습니다. 변경 없이 종료합니다.")
+            notify_slack(
+                f"ℹ️ 메타 광고소재 시트 업데이트 ({since}~{until})\n"
+                f"수집된 데이터가 없어 변경 사항이 없습니다."
+            )
+            return
 
-    rows = [creative.normalize_row(r) for r in raw_rows]
+        rows = [creative.normalize_row(r) for r in raw_rows]
 
-    ws = get_worksheet(creative.COLUMNS)
-    result = upsert_rows(ws, rows, creative.COLUMNS, key_cols=("일자", "ad_id"))
+        ws = get_worksheet(creative.COLUMNS)
+        result = upsert_rows(ws, rows, creative.COLUMNS, key_cols=("일자", "ad_id"))
+        totals = summarize_totals(rows)
 
-    print(
-        f"[DONE] 시트 반영 완료 — 갱신: {result['updated']}행 / 신규: {result['appended']}행"
-    )
+        print(
+            f"[DONE] 시트 반영 완료 — 갱신: {result['updated']}행 / 신규: {result['appended']}행"
+        )
+
+        notify_slack(
+            f"✅ 메타 광고소재 시트 업데이트 완료 (brainology)\n"
+            f"• 기간: {since} ~ {until}\n"
+            f"• 반영: 갱신 {result['updated']}행 / 신규 {result['appended']}행\n"
+            f"• 지출 {totals['spend']:,.0f}원 · 구매 {totals['purchases']}건 · "
+            f"매출 {totals['revenue']:,.0f}원 · ROAS {totals['roas']:.2f}"
+        )
+    except Exception as e:
+        # 스케줄러 무인 실행 중 실패를 놓치지 않도록 슬랙으로 알린 뒤 에러를 다시 던진다.
+        notify_slack(
+            f"⚠️ 메타 광고소재 시트 업데이트 실패 ({since}~{until})\n"
+            f"{type(e).__name__}: {e}"
+        )
+        raise
 
 
 if __name__ == "__main__":
