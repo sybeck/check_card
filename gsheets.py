@@ -144,12 +144,19 @@ def upsert_rows(
         else:
             appends.append(values)
 
-    if updates:
+    # 대용량 백필(수천 행) 대비: 단일 요청 payload가 과도하게 커지지 않도록
+    # 청크 단위로 나눠 쓴다. (쿼터에는 거의 영향 없음 — 호출 몇 번 추가될 뿐)
+    WRITE_CHUNK = 2000
+
+    for i in range(0, len(updates), WRITE_CHUNK):
+        chunk = updates[i : i + WRITE_CHUNK]
         ws.batch_update(
-            [{"range": u["range"], "values": u["values"]} for u in updates],
+            [{"range": u["range"], "values": u["values"]} for u in chunk],
             value_input_option="USER_ENTERED",
         )
-    if appends:
-        ws.append_rows(appends, value_input_option="USER_ENTERED")
+
+    for i in range(0, len(appends), WRITE_CHUNK):
+        chunk = appends[i : i + WRITE_CHUNK]
+        ws.append_rows(chunk, value_input_option="USER_ENTERED")
 
     return {"updated": len(updates), "appended": len(appends)}
