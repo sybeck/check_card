@@ -11,6 +11,7 @@ slack_card_bot.py 에서 register_meta_handlers(app) 로 등록되어
 from datetime import datetime, timedelta, timezone
 
 import meta_dashboard
+from common import dedup_seen
 
 KST = timezone(timedelta(hours=9))
 
@@ -79,6 +80,50 @@ def format_brainology_budget(data: dict) -> str:
     return "\n".join(lines)
 
 
+def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
+    """멘션 '성과 0601-0612' → 기간 성과를 키워드별로 집계해 노션에 기록하고 스레드 회신.
+
+    무거운 의존성(performance_report/notion_writer)은 지연 import 하여
+    노션 미설정 시에도 봇 나머지 기능은 정상 동작하도록 한다.
+    """
+    import performance_report as perf
+
+    try:
+        since, until = perf.parse_period(text)
+    except Exception as e:
+        client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts, text=f"성과 기간 인식 실패 ❌\n{e}"
+        )
+        return
+
+    client.chat_postMessage(
+        channel=channel, thread_ts=thread_ts, text=f"⏳ 성과 집계 중… ({since} ~ {until})"
+    )
+
+    try:
+        report = perf.build_report(since, until)
+        import notion_writer
+
+        url = notion_writer.create_performance_page(report)
+        kw_count = len(report["groups"]) - 1  # 미분류 제외 키워드 수
+        t = report["total"]
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=(
+                f"✅ 성과 집계 완료 ({since} ~ {until})\n"
+                f"키워드 {kw_count}개 집계 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
+                f"🔗 {url}"
+            ),
+        )
+    except Exception as e:
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=f"성과 집계 실패 ❌\n{type(e).__name__}: {e}",
+        )
+
+
 # 멘션 라우팅 (스레드 안에서는 슬래시 명령이 막히므로 멘션도 지원)
 def _route_mention_text(text: str):
     t = text or ""
@@ -132,7 +177,16 @@ def register_meta_handlers(app):
     def on_app_mention(event, client):
         channel = event.get("channel")
         thread_ts = event.get("thread_ts") or event.get("ts")  # 스레드 안이면 같은 스레드에 답글
-        route = _route_mention_text(event.get("text", ""))
+        text = event.get("text", "")
+
+        # 성과 집계: "@봇 성과 0601-0612"
+        if "성과" in text:
+            if dedup_seen(f"perf:{event.get('ts')}"):  # Slack 이벤트 재시도 중복 방지
+                return
+            handle_performance_mention(text, channel, thread_ts, client)
+            return
+
+        route = _route_mention_text(text)
         if not route:
             client.chat_postMessage(
                 channel=channel,
