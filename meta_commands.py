@@ -111,7 +111,7 @@ def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
             thread_ts=thread_ts,
             text=(
                 f"✅ Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
-                f"총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
+                f"총 구매전환값 {t['revenue']:,.0f}원 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
                 f"🔗 {url}"
             ),
         )
