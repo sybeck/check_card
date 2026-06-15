@@ -18,7 +18,7 @@ from slack_sdk import WebClient
 
 import performance_report as perf
 import notion_writer
-from common import now_kst, SLACK_BOT_TOKEN, PERF_WEEKLY_CHANNEL_ID
+from common import now_kst, SLACK_BOT_TOKEN, PERF_WEEKLY_CHANNEL_ID, KANG_DAEUN_USER_ID
 
 
 def prev_week_range():
@@ -62,7 +62,9 @@ def main():
         t = report["total"]
         print(f"[DONE] 노션 기록 완료 — {url}")
         notify_slack(
-            f"✅ 주간 Meta 광고 성과 개인별 집계 완료 ({since} ~ {until})\n"
+            f"✅ <@{KANG_DAEUN_USER_ID}> 팀장님,\n"
+            f"주간 개인별 Meta 광고 성과 집계를 완료했습니다.\n"
+            f"({since} ~ {until})\n"
             f"총 구매전환값 {t['revenue']:,.0f}원 · 총 지출 {t['spend']:,.0f}원 · ROAS {t['roas']:.2f}\n"
             f"🔗 {url}"
         )

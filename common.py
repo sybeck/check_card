@@ -34,6 +34,9 @@ META_CREATIVE_CHANNEL_ID = "C0AJ2M6KDFE"
 # 주간 Meta 광고 성과 개인별 집계(자동) 결과 알림 채널 ID
 PERF_WEEKLY_CHANNEL_ID = "C0A24HBHNFN"
 
+# 주간 성과 완료 메시지에서 멘션할 강다은 팀장님 Slack member ID
+KANG_DAEUN_USER_ID = "U05TADGG8Q6"
+
 
 # =========================
 # Time helpers
