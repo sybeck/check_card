@@ -127,7 +127,7 @@ def upsert_rows(
         return [r.get(col, "") for col in header]
 
     updates = []  # batch_update payload
-    appends = []  # append_rows payload
+    appends = []  # 신규 행(값 리스트)
     last_col = _col_letter(len(header))
 
     for r in rows:
@@ -155,8 +155,28 @@ def upsert_rows(
             value_input_option="USER_ENTERED",
         )
 
-    for i in range(0, len(appends), WRITE_CHUNK):
-        chunk = appends[i : i + WRITE_CHUNK]
-        ws.append_rows(chunk, value_input_option="USER_ENTERED")
+    # 신규 행은 append_rows(테이블 자동 감지)를 쓰지 않는다.
+    # 시트에 무관한 열(예: R열 이후)을 임의로 추가하면 자동 감지가 표의 시작 열을
+    # 잘못 잡아 신규 행이 A열이 아닌 엉뚱한 열부터 쌓이는 문제가 있었다.
+    # 항상 'A열 + 실제 데이터(키가 채워진 행)의 마지막 다음 행'에 명시적 범위로 기록한다.
+    if appends:
+        # existing_index 는 키(일자/ad_id)가 채워진 '실제' 행만 담으므로,
+        # A열이 빈 임의 추가열/오기록 행은 자연히 무시된다.
+        start_row = (max(existing_index.values()) + 1) if existing_index else 2
+
+        # 그리드 행이 부족하면 확장 (대량 백필 안전장치)
+        need_last = start_row + len(appends) - 1
+        if need_last > ws.row_count:
+            ws.add_rows(need_last - ws.row_count)
+
+        for i in range(0, len(appends), WRITE_CHUNK):
+            chunk = appends[i : i + WRITE_CHUNK]
+            r1 = start_row + i
+            r2 = r1 + len(chunk) - 1
+            ws.update(
+                chunk,
+                f"A{r1}:{last_col}{r2}",
+                value_input_option="USER_ENTERED",
+            )
 
     return {"updated": len(updates), "appended": len(appends)}
