@@ -8,3 +8,4 @@ python-dotenv
 gspread
 google-auth
 notion-client
+popbill
