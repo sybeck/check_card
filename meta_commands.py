@@ -80,6 +80,48 @@ def format_brainology_budget(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _fmt_sales_lines(m: dict) -> list:
+    return [
+        f"• 현재 매출 {m['revenue']:,} / {m['purchases']:,}",
+        f"• 메타 광고비: {m['spend']:,.0f}",
+        f"• ROAS {m['roas']:,.2f} / CPA {m['cpa']:,.0f}",
+    ]
+
+
+def format_brainology_sales(data: dict) -> str:
+    lines = [f"*👀 브레인올로지 현재 매출 현황* ({_now_kst_str()} KST)"]
+    if data.get("coupang_failed"):
+        lines.append("⚠️ 쿠팡 조회는 에러가 발생해서 집계에서 제외되었습니다.")
+    for product, m in data["products"].items():
+        lines.append(f"\n*✅ {product}*")
+        lines += _fmt_sales_lines(m)
+    lines.append("\n*합계*")
+    lines += _fmt_sales_lines(data["total"])
+    return "\n".join(lines)
+
+
+def handle_sales_mention(channel: str, thread_ts: str, client):
+    """멘션 '브올매출' → 브레인올로지 제품별 매출/광고비/ROAS/CPA 집계 후 스레드 회신.
+
+    카페24/쿠팡은 Playwright 로 브라우저를 띄워 수십 초~수 분 걸리므로 먼저 진행 메시지를
+    보낸 뒤 집계한다. 무거운 의존성은 지연 import 한다.
+    """
+    client.chat_postMessage(
+        channel=channel, thread_ts=thread_ts, text="⏳ 브레인올로지 현재 매출 집계 중… (카페24/쿠팡/네이버/메타, 수 분 걸릴 수 있어요)"
+    )
+    try:
+        import brainology_sales
+
+        data = brainology_sales.get_brainology_sales()
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=format_brainology_sales(data))
+    except Exception as e:
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=f"브레인올로지 매출 집계 실패 ❌\n{type(e).__name__}: {e}",
+        )
+
+
 def handle_performance_mention(text: str, channel: str, thread_ts: str, client):
     """멘션 '성과 0601-0612' → 기간 성과를 키워드별로 집계해 노션에 기록하고 스레드 회신.
 
@@ -185,12 +227,19 @@ def register_meta_handlers(app):
             handle_performance_mention(text, channel, thread_ts, client)
             return
 
+        # 브레인올로지 현재 매출 집계: "@봇 브올매출"
+        if "브올매출" in text:
+            if dedup_seen(f"sales:{event.get('ts')}"):  # Slack 이벤트 재시도 중복 방지
+                return
+            handle_sales_mention(channel, thread_ts, client)
+            return
+
         route = _route_mention_text(text)
         if not route:
             client.chat_postMessage(
                 channel=channel,
                 thread_ts=thread_ts,
-                text="사용법: 멘션과 함께 `부제meta`/`브올meta`(대시보드) 또는 `부제예산`/`브올예산`(일일예산) 을 입력하세요.\n예) `@봇이름 브올meta`",
+                text="사용법: 멘션과 함께 `부제meta`/`브올meta`(대시보드), `부제예산`/`브올예산`(일일예산), `브올매출`(브레인올로지 현재 매출) 을 입력하세요.\n예) `@봇이름 브올매출`",
             )
             return
         formatter, fetcher = route
