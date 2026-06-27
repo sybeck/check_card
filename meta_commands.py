@@ -97,6 +97,7 @@ def format_brainology_sales(data: dict) -> str:
         lines += _fmt_sales_lines(m)
     lines.append("\n*합계*")
     lines += _fmt_sales_lines(data["total"])
+    lines.append("\n_(실 결제금액 기준)_")
     return "\n".join(lines)
 
 
